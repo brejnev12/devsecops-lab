@@ -4,8 +4,8 @@ import sqlite3
 
 app = Flask(__name__)
 
-# VULNÉRABILITÉ 1 : Clé secrète codée en dur ⚠️
-SECRET_KEY = 'super_secret_123'
+# Correction : suppression de la clé secrète codée en dur
+app.config['SECRET_KEY'] = ''
 
 @app.route('/')
 def index():
@@ -13,19 +13,18 @@ def index():
 
 @app.route('/search')
 def search():
-    # VULNÉRABILITÉ 2 : Injection SQL ⚠️
+    # Correction : requête SQL paramétrée
     query = request.args.get('q', '')
     conn = sqlite3.connect('db.sqlite3')
     cursor = conn.cursor()
-    # NE JAMAIS FAIRE ÇA en vrai !
-    cursor.execute(f"SELECT * FROM users WHERE name = '{query}'")
+    cursor.execute("SELECT * FROM users WHERE name = ?", (query,))
     return str(cursor.fetchall())
 
 @app.route('/greet')
 def greet():
-    # VULNÉRABILITÉ 3 : XSS (Cross-Site Scripting) ⚠️
+    # Correction : éviter XSS
     name = request.args.get('name', 'World')
-    return render_template_string(f'<h1>Hello {name}!</h1>')
+    return render_template_string('<h1>Hello {{ name }}!</h1>', name=name)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)

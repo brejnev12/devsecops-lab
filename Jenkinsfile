@@ -10,7 +10,7 @@ pipeline {
         // ── STAGE 1 : Récupérer le code ──
         stage('Checkout') {
             steps {
-                echo ' Récupération du code source...' 📥
+                echo ' Récupération du code source...'
                 checkout scm
             }
         }
@@ -21,9 +21,9 @@ pipeline {
                 docker { image 'python:3.11-slim' }
             }
             steps {
-                echo ' Installation des dépendances...' 🔧
+                echo ' Installation des dépendances...' 
                 sh 'pip install -r app/requirements.txt pytest'
-                echo ' Exécution des tests unitaires...' 🧪
+                echo ' Exécution des tests unitaires...' 
                 sh 'pytest tests/ -v'
             }
         }
@@ -34,7 +34,7 @@ pipeline {
                 docker { image 'python:3.11-slim' }
             }
             steps {
-                echo ' Analyse de sécurité statique du code (SAST)...' 🔍
+                echo ' Analyse de sécurité statique du code (SAST)...' 
                 sh 'pip install bandit'
                 // -ll = niveau HIGH uniquement, -r = récursif
                 sh 'bandit -r app/ -f json -o bandit-report.json || true'
@@ -50,7 +50,7 @@ pipeline {
         // ── STAGE 4 : Build de l'image Docker ──
         stage('Docker Build') {
             steps {
-                echo ' Construction de l image Docker...' 🐳
+                echo ' Construction de l image Docker...' 
                 sh 'docker build -t devsecops-app:latest .'
             }
         }
@@ -58,7 +58,7 @@ pipeline {
         // ── STAGE 5 : DAST avec OWASP ZAP ──
         stage('DAST - OWASP ZAP Pentest') {
             steps {
-                echo ' Lancement du pentest dynamique avec OWASP ZAP...' 🚨
+                echo ' Lancement du pentest dynamique avec OWASP ZAP...' 
                 // Démarrer l'application cible
                 sh '''
                 docker run -d \
