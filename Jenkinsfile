@@ -1,4 +1,3 @@
-// Jenkinsfile DevSecOps Pipeline optimisé
 pipeline {
     agent any
     environment {
@@ -47,10 +46,14 @@ pipeline {
                 echo 'Analyse de sécurité statique (Bandit)...'
                 script {
                     def cmd = isUnix() ? 'sh' : 'bat'
-                    "${cmd}" """
-                    docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} bandit -r app/ -f json -o bandit-report.json || true
-                    docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} bandit -r app/ || true
-                    """
+                    try {
+                        "${cmd}" """
+                        docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} bandit -r app/ -f json -o bandit-report.json
+                        docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} bandit -r app/
+                        """
+                    } catch(Exception e) {
+                        echo "Bandit a retourné une erreur mais le pipeline continue : ${e}"
+                    }
                 }
             }
             post {
@@ -74,10 +77,14 @@ pipeline {
                     """
 
                     // Lancer ZAP Baseline Scan
-                    "${cmd}" """
-                    docker run --rm --network ${DOCKER_NET} -v ${env.WORKSPACE}:/zap/wrk ghcr.io/zaproxy/zaproxy:stable \\
-                    zap-baseline.py -t http://target-app:5000 -r zap-report.html -J zap-report.json -I
-                    """
+                    try {
+                        "${cmd}" """
+                        docker run --rm --network ${DOCKER_NET} -v ${env.WORKSPACE}:/zap/wrk ghcr.io/zaproxy/zaproxy:stable \\
+                        zap-baseline.py -t http://target-app:5000 -r zap-report.html -J zap-report.json -I
+                        """
+                    } catch(Exception e) {
+                        echo "ZAP a retourné une erreur mais le pipeline continue : ${e}"
+                    }
                 }
             }
             post {

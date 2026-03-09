@@ -1,21 +1,20 @@
-# Utiliser l'image Python officielle
+# Dockerfile complet DevSecOps
 FROM python:3.11-slim
 
-# Répertoire de travail dans le conteneur
 WORKDIR /app
 
-# Copier les fichiers de dépendances
+# Copier le fichier requirements
 COPY app/requirements.txt .
 
-# Installer toutes les dépendances de l'application + outils de test
+# Installer toutes les dépendances + outils de test
 RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir pytest bandit
+    && pip install --no-cache-dir pytest bandit pbr
 
-# Copier le code de l'application
+# Copier le code source
 COPY app/ .
 
-# Exposer le port de l'application
+# Exposer le port
 EXPOSE 5000
 
-# Commande par défaut : lancer l'application
+# Lancer l'application par défaut
 CMD ["python", "app.py"]
