@@ -100,7 +100,8 @@ pipeline {
                         reportFiles: 'zap-report.html',
                         reportName: 'ZAP Security Report',
                         keepAll: true,
-                        alwaysLinkToLastBuild: true
+                        alwaysLinkToLastBuild: true,
+                        allowMissing: true
                     ])
                     archiveArtifacts artifacts: 'zap-report.json', allowEmptyArchive: true
                 }
