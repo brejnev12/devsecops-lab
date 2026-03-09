@@ -100,10 +100,10 @@ pipeline {
     }
     post {
         success {
-            echo ' Pipeline terminé ! Consulte les rapports de sécurité.' ✅
+            echo 'Pipeline terminé ! Consulte les rapports de sécurité.'
         }
         failure {
-            echo ' Pipeline échoué. Regarde les logs pour plus de détails.' ❌
+            echo 'Pipeline échoué. Regarde les logs pour plus de détails.'
         }
-    }
+}
 }
