@@ -1,4 +1,4 @@
-// Jenkinsfile
+// Jenkinsfile corrigé
 pipeline {
     agent any
     environment {
@@ -10,7 +10,7 @@ pipeline {
         // ── STAGE 1 : Récupérer le code ──
         stage('Checkout') {
             steps {
-                echo ' Récupération du code source...'
+                echo 'Récupération du code source...'
                 checkout scm
             }
         }
@@ -18,12 +18,15 @@ pipeline {
         // ── STAGE 2 : Build et tests unitaires ──
         stage('Build & Test') {
             agent {
-                docker { image 'python:3.11-slim' }
+                docker {
+                    image 'python:3.11-slim'
+                    reuseNode true // Évite workspace@2
+                }
             }
             steps {
-                echo ' Installation des dépendances...' 
+                echo 'Installation des dépendances...' 
                 sh 'pip install -r app/requirements.txt pytest'
-                echo ' Exécution des tests unitaires...' 
+                echo 'Exécution des tests unitaires...' 
                 sh 'pytest tests/ -v'
             }
         }
@@ -31,12 +34,14 @@ pipeline {
         // ── STAGE 3 : SAST avec Bandit ──
         stage('SAST - Bandit Security Scan') {
             agent {
-                docker { image 'python:3.11-slim' }
+                docker { 
+                    image 'python:3.11-slim'
+                    reuseNode true
+                }
             }
             steps {
-                echo ' Analyse de sécurité statique du code (SAST)...' 
+                echo 'Analyse de sécurité statique du code (SAST)...' 
                 sh 'pip install bandit'
-                // -ll = niveau HIGH uniquement, -r = récursif
                 sh 'bandit -r app/ -f json -o bandit-report.json || true'
                 sh 'bandit -r app/ || true'
             }
@@ -50,43 +55,48 @@ pipeline {
         // ── STAGE 4 : Build de l'image Docker ──
         stage('Docker Build') {
             steps {
-                echo ' Construction de l image Docker...' 
-                sh 'docker build -t devsecops-app:latest .'
+                echo 'Construction de l image Docker...' 
+                // Utilisation de bat si agent Windows
+                script {
+                    if (isUnix()) {
+                        sh 'docker build -t devsecops-app:latest .'
+                    } else {
+                        bat 'docker build -t devsecops-app:latest .'
+                    }
+                }
             }
         }
 
         // ── STAGE 5 : DAST avec OWASP ZAP ──
         stage('DAST - OWASP ZAP Pentest') {
             steps {
-                echo ' Lancement du pentest dynamique avec OWASP ZAP...' 
-                // Démarrer l'application cible
-                sh '''
-                docker run -d \
-                --name target-app \
-                --network ${DOCKER_NET} \
-                -p ${APP_PORT}:5000 \
-                devsecops-app:latest
-                sleep 5
-                '''
-                // Lancer ZAP en mode baseline scan
-                sh '''
-                docker run --rm \
-                --network ${DOCKER_NET} \
-                -v $(pwd):/zap/wrk \
-                ghcr.io/zaproxy/zaproxy:stable \
-                zap-baseline.py \
-                -t http://target-app:5000 \
-                -r zap-report.html \
-                -J zap-report.json \
-                -I
-                '''
+                echo 'Lancement du pentest dynamique avec OWASP ZAP...' 
+                script {
+                    // Déterminer la commande selon l'OS
+                    def runCmd = isUnix() ? 'sh' : 'bat'
+
+                    // Démarrer l'application cible
+                    "${runCmd}" """
+                    docker run -d --name target-app --network ${DOCKER_NET} -p ${APP_PORT}:5000 devsecops-app:latest
+                    sleep 5
+                    """
+
+                    // Lancer ZAP Baseline Scan
+                    "${runCmd}" """
+                    docker run --rm --network ${DOCKER_NET} -v ${env.WORKSPACE}:/zap/wrk ghcr.io/zaproxy/zaproxy:stable \\
+                    zap-baseline.py -t http://target-app:5000 -r zap-report.html -J zap-report.json -I
+                    """
+                }
             }
             post {
                 always {
-                    // Arrêter l'app cible
-                    sh 'docker stop target-app || true'
-                    sh 'docker rm target-app || true'
-                    // Sauvegarder les rapports
+                    // Arrêter et supprimer l'app cible
+                    script {
+                        def stopCmd = isUnix() ? 'sh' : 'bat'
+                        "${stopCmd}" 'docker stop target-app || true'
+                        "${stopCmd}" 'docker rm target-app || true'
+                    }
+                    // Publier les rapports
                     publishHTML([
                         allowMissing: true,
                         reportDir: '.',
@@ -105,5 +115,5 @@ pipeline {
         failure {
             echo 'Pipeline échoué. Regarde les logs pour plus de détails.'
         }
-}
+    }
 }
