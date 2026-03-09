@@ -96,10 +96,11 @@ pipeline {
             post {
                 always {
                     publishHTML([
-                        allowMissing: true,
                         reportDir: '.',
                         reportFiles: 'zap-report.html',
-                        reportName: 'ZAP Security Report'
+                        reportName: 'ZAP Security Report',
+                        keepAll: true,
+                        alwaysLinkToLastBuild: true
                     ])
                     archiveArtifacts artifacts: 'zap-report.json', allowEmptyArchive: true
                 }
