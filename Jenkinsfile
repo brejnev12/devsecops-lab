@@ -1,4 +1,4 @@
-// Jenkinsfile stable Windows/Linux - DevSecOps Pipeline
+// Jenkinsfile DevSecOps Pipeline optimisé
 pipeline {
     agent any
     environment {
@@ -6,7 +6,6 @@ pipeline {
         ZAP_PORT = '8090'
         DOCKER_NET = 'devsecops-lab'
         APP_IMAGE = 'devsecops-app:latest'
-        PYTHON_IMAGE = 'devsecops-python:latest'
     }
 
     stages {
@@ -18,27 +17,25 @@ pipeline {
             }
         }
 
-        // ── STAGE 2 : Build image Python avec dépendances ──
-        stage('Build Python Image') {
+        // ── STAGE 2 : Build Docker image complète ──
+        stage('Docker Build') {
             steps {
-                echo 'Construction de l image Python avec dépendances...'
+                echo 'Construction de l image Docker complète (app + dépendances)...'
                 script {
                     def cmd = isUnix() ? 'sh' : 'bat'
-                    "${cmd}" """
-                    docker build -f Dockerfile.python -t ${PYTHON_IMAGE} .
-                    """
+                    "${cmd}" "docker build -t ${APP_IMAGE} ."
                 }
             }
         }
 
-        // ── STAGE 3 : Tests unitaires ──
+        // ── STAGE 3 : Tests unitaires avec pytest ──
         stage('Unit Tests') {
             steps {
                 echo 'Exécution des tests unitaires avec pytest...'
                 script {
                     def cmd = isUnix() ? 'sh' : 'bat'
                     "${cmd}" """
-                    docker run --rm -v ${env.WORKSPACE}:/app -w /app ${PYTHON_IMAGE} pytest tests/ -v
+                    docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} pytest tests/ -v
                     """
                 }
             }
@@ -51,8 +48,8 @@ pipeline {
                 script {
                     def cmd = isUnix() ? 'sh' : 'bat'
                     "${cmd}" """
-                    docker run --rm -v ${env.WORKSPACE}:/app -w /app ${PYTHON_IMAGE} bandit -r app/ -f json -o bandit-report.json || true
-                    docker run --rm -v ${env.WORKSPACE}:/app -w /app ${PYTHON_IMAGE} bandit -r app/ || true
+                    docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} bandit -r app/ -f json -o bandit-report.json || true
+                    docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} bandit -r app/ || true
                     """
                 }
             }
@@ -63,18 +60,7 @@ pipeline {
             }
         }
 
-        // ── STAGE 5 : Build Docker image de l'application ──
-        stage('Docker Build') {
-            steps {
-                echo 'Construction de l image Docker de l application...'
-                script {
-                    def cmd = isUnix() ? 'sh' : 'bat'
-                    "${cmd}" "docker build -t ${APP_IMAGE} ."
-                }
-            }
-        }
-
-        // ── STAGE 6 : DAST avec OWASP ZAP ──
+        // ── STAGE 5 : DAST avec OWASP ZAP ──
         stage('DAST - OWASP ZAP Pentest') {
             steps {
                 echo 'Lancement du pentest dynamique avec OWASP ZAP...'
