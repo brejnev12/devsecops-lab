@@ -6,6 +6,7 @@ pipeline {
         ZAP_PORT = '8090'
         DOCKER_NET = 'devsecops-lab'
         APP_IMAGE = 'devsecops-app:latest'
+        PYTHON_IMAGE = 'devsecops-python:latest'
     }
 
     stages {
@@ -17,30 +18,41 @@ pipeline {
             }
         }
 
-        // ── STAGE 2 : Build et tests unitaires ──
-        stage('Build & Test') {
+        // ── STAGE 2 : Build image Python avec dépendances ──
+        stage('Build Python Image') {
             steps {
-                echo 'Installation des dépendances et tests unitaires...'
+                echo 'Construction de l image Python avec dépendances...'
                 script {
                     def cmd = isUnix() ? 'sh' : 'bat'
                     "${cmd}" """
-                    docker run --rm -v ${env.WORKSPACE}:/app -w /app python:3.11-slim pip install -r app/requirements.txt pytest
-                    docker run --rm -v ${env.WORKSPACE}:/app -w /app python:3.11-slim pytest tests/ -v
+                    docker build -f Dockerfile.python -t ${PYTHON_IMAGE} .
                     """
                 }
             }
         }
 
-        // ── STAGE 3 : SAST avec Bandit ──
+        // ── STAGE 3 : Tests unitaires ──
+        stage('Unit Tests') {
+            steps {
+                echo 'Exécution des tests unitaires avec pytest...'
+                script {
+                    def cmd = isUnix() ? 'sh' : 'bat'
+                    "${cmd}" """
+                    docker run --rm -v ${env.WORKSPACE}:/app -w /app ${PYTHON_IMAGE} pytest tests/ -v
+                    """
+                }
+            }
+        }
+
+        // ── STAGE 4 : SAST avec Bandit ──
         stage('SAST - Bandit Security Scan') {
             steps {
                 echo 'Analyse de sécurité statique (Bandit)...'
                 script {
                     def cmd = isUnix() ? 'sh' : 'bat'
                     "${cmd}" """
-                    docker run --rm -v ${env.WORKSPACE}:/app -w /app python:3.11-slim pip install bandit
-                    docker run --rm -v ${env.WORKSPACE}:/app -w /app python:3.11-slim bandit -r app/ -f json -o bandit-report.json || true
-                    docker run --rm -v ${env.WORKSPACE}:/app -w /app python:3.11-slim bandit -r app/ || true
+                    docker run --rm -v ${env.WORKSPACE}:/app -w /app ${PYTHON_IMAGE} bandit -r app/ -f json -o bandit-report.json || true
+                    docker run --rm -v ${env.WORKSPACE}:/app -w /app ${PYTHON_IMAGE} bandit -r app/ || true
                     """
                 }
             }
@@ -51,10 +63,10 @@ pipeline {
             }
         }
 
-        // ── STAGE 4 : Build Docker image ──
+        // ── STAGE 5 : Build Docker image de l'application ──
         stage('Docker Build') {
             steps {
-                echo 'Construction de l image Docker...'
+                echo 'Construction de l image Docker de l application...'
                 script {
                     def cmd = isUnix() ? 'sh' : 'bat'
                     "${cmd}" "docker build -t ${APP_IMAGE} ."
@@ -62,7 +74,7 @@ pipeline {
             }
         }
 
-        // ── STAGE 5 : DAST avec OWASP ZAP ──
+        // ── STAGE 6 : DAST avec OWASP ZAP ──
         stage('DAST - OWASP ZAP Pentest') {
             steps {
                 echo 'Lancement du pentest dynamique avec OWASP ZAP...'
