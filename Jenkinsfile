@@ -68,6 +68,7 @@ pipeline {
                 script {
                     if (isUnix()) {
                         sh """
+                        docker rm -f target-app 2>/dev/null || true
                         docker run -d --name target-app --network ${DOCKER_NET} -p ${APP_PORT}:5000 ${APP_IMAGE}
                         sleep 5
                         """
@@ -79,8 +80,9 @@ pipeline {
                         sh 'docker rm target-app || true'
                     } else {
                         bat """
+                        docker rm -f target-app 2>nul || echo Pas de conteneur existant
                         docker run -d --name target-app --network ${DOCKER_NET} -p ${APP_PORT}:5000 ${APP_IMAGE}
-                        timeout /T 5 /NOBREAK
+                        ping 127.0.0.1 -n 6 > nul
                         """
                         bat """
                         docker run --rm --network ${DOCKER_NET} -v ${env.WORKSPACE}:/zap/wrk ghcr.io/zaproxy/zaproxy:stable ^
