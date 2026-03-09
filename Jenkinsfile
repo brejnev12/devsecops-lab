@@ -44,13 +44,14 @@ pipeline {
             steps {
                 echo 'Analyse statique avec Bandit...'
                 script {
-                    def cmd = isUnix() ? 'sh' : 'bat'
-                    try {
-                        "${cmd}" """
-                        docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} bandit -r app/ -f json -o bandit-report.json
+                    if (isUnix()) {
+                        sh """
+                        docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} bandit -r app/ -f json -o bandit-report.json || true
                         """
-                    } catch(Exception e) {
-                        echo "Bandit a retourné une erreur mais on continue : ${e}"
+                    } else {
+                        bat """
+                        docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} bandit -r app/ -f json -o bandit-report.json || exit 0
+                        """
                     }
                 }
             }
