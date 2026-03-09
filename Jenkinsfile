@@ -2,13 +2,11 @@ pipeline {
     agent any
     environment {
         APP_PORT = '5000'
-        ZAP_PORT = '8090'
         DOCKER_NET = 'devsecops-lab'
         APP_IMAGE = 'devsecops-app:latest'
     }
 
     stages {
-        // ── STAGE 1 : Checkout ──
         stage('Checkout') {
             steps {
                 echo 'Récupération du code source...'
@@ -16,43 +14,43 @@ pipeline {
             }
         }
 
-        // ── STAGE 2 : Build Docker image complète ──
         stage('Docker Build') {
             steps {
-                echo 'Construction de l image Docker complète (app + dépendances)...'
+                echo 'Construction de l image Docker...'
                 script {
-                    def cmd = isUnix() ? 'sh' : 'bat'
-                    "${cmd}" "docker build -t ${APP_IMAGE} ."
+                    if (isUnix()) {
+                        sh "docker build -t ${APP_IMAGE} ."
+                    } else {
+                        bat "docker build -t ${APP_IMAGE} ."
+                    }
                 }
             }
         }
 
-        // ── STAGE 3 : Tests unitaires avec pytest ──
         stage('Unit Tests') {
             steps {
-                echo 'Exécution des tests unitaires avec pytest...'
+                echo 'Exécution des tests unitaires...'
                 script {
-                    def cmd = isUnix() ? 'sh' : 'bat'
-                    "${cmd}" """
-                    docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} pytest tests/ -v
-                    """
+                    if (isUnix()) {
+                        sh "docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} pytest tests/ -v"
+                    } else {
+                        bat "docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} pytest tests/ -v"
+                    }
                 }
             }
         }
 
-        // ── STAGE 4 : SAST avec Bandit ──
-        stage('SAST - Bandit Security Scan') {
+        stage('SAST - Bandit Scan') {
             steps {
-                echo 'Analyse de sécurité statique (Bandit)...'
+                echo 'Analyse statique avec Bandit...'
                 script {
                     def cmd = isUnix() ? 'sh' : 'bat'
                     try {
                         "${cmd}" """
                         docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} bandit -r app/ -f json -o bandit-report.json
-                        docker run --rm -v ${env.WORKSPACE}:/app -w /app ${APP_IMAGE} bandit -r app/
                         """
                     } catch(Exception e) {
-                        echo "Bandit a retourné une erreur mais le pipeline continue : ${e}"
+                        echo "Bandit a retourné une erreur mais on continue : ${e}"
                     }
                 }
             }
@@ -63,38 +61,37 @@ pipeline {
             }
         }
 
-        // ── STAGE 5 : DAST avec OWASP ZAP ──
-        stage('DAST - OWASP ZAP Pentest') {
+        stage('DAST - OWASP ZAP') {
             steps {
-                echo 'Lancement du pentest dynamique avec OWASP ZAP...'
+                echo 'Pentest dynamique avec ZAP...'
                 script {
-                    def cmd = isUnix() ? 'sh' : 'bat'
-
-                    // Démarrer l'application cible
-                    "${cmd}" """
-                    docker run -d --name target-app --network ${DOCKER_NET} -p ${APP_PORT}:5000 ${APP_IMAGE}
-                    sleep 5
-                    """
-
-                    // Lancer ZAP Baseline Scan
-                    try {
-                        "${cmd}" """
+                    if (isUnix()) {
+                        sh """
+                        docker run -d --name target-app --network ${DOCKER_NET} -p ${APP_PORT}:5000 ${APP_IMAGE}
+                        sleep 5
+                        """
+                        sh """
                         docker run --rm --network ${DOCKER_NET} -v ${env.WORKSPACE}:/zap/wrk ghcr.io/zaproxy/zaproxy:stable \\
                         zap-baseline.py -t http://target-app:5000 -r zap-report.html -J zap-report.json -I
                         """
-                    } catch(Exception e) {
-                        echo "ZAP a retourné une erreur mais le pipeline continue : ${e}"
+                        sh 'docker stop target-app || true'
+                        sh 'docker rm target-app || true'
+                    } else {
+                        bat """
+                        docker run -d --name target-app --network ${DOCKER_NET} -p ${APP_PORT}:5000 ${APP_IMAGE}
+                        timeout /T 5 /NOBREAK
+                        """
+                        bat """
+                        docker run --rm --network ${DOCKER_NET} -v ${env.WORKSPACE}:/zap/wrk ghcr.io/zaproxy/zaproxy:stable ^
+                        zap-baseline.py -t http://target-app:5000 -r zap-report.html -J zap-report.json -I
+                        """
+                        bat 'docker stop target-app || exit 0'
+                        bat 'docker rm target-app || exit 0'
                     }
                 }
             }
             post {
                 always {
-                    script {
-                        def stopCmd = isUnix() ? 'sh' : 'bat'
-                        "${stopCmd}" 'docker stop target-app || true'
-                        "${stopCmd}" 'docker rm target-app || true'
-                    }
-                    // Publier les rapports
                     publishHTML([
                         allowMissing: true,
                         reportDir: '.',
@@ -108,11 +105,7 @@ pipeline {
     }
 
     post {
-        success {
-            echo 'Pipeline terminé ! Consulte les rapports de sécurité.'
-        }
-        failure {
-            echo 'Pipeline échoué. Vérifie les logs pour plus de détails.'
-        }
+        success { echo 'Pipeline terminé avec succès !' }
+        failure { echo 'Pipeline échoué, vérifier les logs.' }
     }
 }
