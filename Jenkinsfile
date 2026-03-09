@@ -1,13 +1,15 @@
-// Jenkinsfile corrigé
+// Jenkinsfile stable Windows/Linux - DevSecOps Pipeline
 pipeline {
     agent any
     environment {
         APP_PORT = '5000'
         ZAP_PORT = '8090'
         DOCKER_NET = 'devsecops-lab'
+        APP_IMAGE = 'devsecops-app:latest'
     }
+
     stages {
-        // ── STAGE 1 : Récupérer le code ──
+        // ── STAGE 1 : Checkout ──
         stage('Checkout') {
             steps {
                 echo 'Récupération du code source...'
@@ -17,33 +19,30 @@ pipeline {
 
         // ── STAGE 2 : Build et tests unitaires ──
         stage('Build & Test') {
-            agent {
-                docker {
-                    image 'python:3.11-slim'
-                    reuseNode true // Évite workspace@2
-                }
-            }
             steps {
-                echo 'Installation des dépendances...' 
-                sh 'pip install -r app/requirements.txt pytest'
-                echo 'Exécution des tests unitaires...' 
-                sh 'pytest tests/ -v'
+                echo 'Installation des dépendances et tests unitaires...'
+                script {
+                    def cmd = isUnix() ? 'sh' : 'bat'
+                    "${cmd}" """
+                    docker run --rm -v ${env.WORKSPACE}:/app -w /app python:3.11-slim pip install -r app/requirements.txt pytest
+                    docker run --rm -v ${env.WORKSPACE}:/app -w /app python:3.11-slim pytest tests/ -v
+                    """
+                }
             }
         }
 
         // ── STAGE 3 : SAST avec Bandit ──
         stage('SAST - Bandit Security Scan') {
-            agent {
-                docker { 
-                    image 'python:3.11-slim'
-                    reuseNode true
-                }
-            }
             steps {
-                echo 'Analyse de sécurité statique du code (SAST)...' 
-                sh 'pip install bandit'
-                sh 'bandit -r app/ -f json -o bandit-report.json || true'
-                sh 'bandit -r app/ || true'
+                echo 'Analyse de sécurité statique (Bandit)...'
+                script {
+                    def cmd = isUnix() ? 'sh' : 'bat'
+                    "${cmd}" """
+                    docker run --rm -v ${env.WORKSPACE}:/app -w /app python:3.11-slim pip install bandit
+                    docker run --rm -v ${env.WORKSPACE}:/app -w /app python:3.11-slim bandit -r app/ -f json -o bandit-report.json || true
+                    docker run --rm -v ${env.WORKSPACE}:/app -w /app python:3.11-slim bandit -r app/ || true
+                    """
+                }
             }
             post {
                 always {
@@ -52,17 +51,13 @@ pipeline {
             }
         }
 
-        // ── STAGE 4 : Build de l'image Docker ──
+        // ── STAGE 4 : Build Docker image ──
         stage('Docker Build') {
             steps {
-                echo 'Construction de l image Docker...' 
-                // Utilisation de bat si agent Windows
+                echo 'Construction de l image Docker...'
                 script {
-                    if (isUnix()) {
-                        sh 'docker build -t devsecops-app:latest .'
-                    } else {
-                        bat 'docker build -t devsecops-app:latest .'
-                    }
+                    def cmd = isUnix() ? 'sh' : 'bat'
+                    "${cmd}" "docker build -t ${APP_IMAGE} ."
                 }
             }
         }
@@ -70,19 +65,18 @@ pipeline {
         // ── STAGE 5 : DAST avec OWASP ZAP ──
         stage('DAST - OWASP ZAP Pentest') {
             steps {
-                echo 'Lancement du pentest dynamique avec OWASP ZAP...' 
+                echo 'Lancement du pentest dynamique avec OWASP ZAP...'
                 script {
-                    // Déterminer la commande selon l'OS
-                    def runCmd = isUnix() ? 'sh' : 'bat'
+                    def cmd = isUnix() ? 'sh' : 'bat'
 
                     // Démarrer l'application cible
-                    "${runCmd}" """
-                    docker run -d --name target-app --network ${DOCKER_NET} -p ${APP_PORT}:5000 devsecops-app:latest
+                    "${cmd}" """
+                    docker run -d --name target-app --network ${DOCKER_NET} -p ${APP_PORT}:5000 ${APP_IMAGE}
                     sleep 5
                     """
 
                     // Lancer ZAP Baseline Scan
-                    "${runCmd}" """
+                    "${cmd}" """
                     docker run --rm --network ${DOCKER_NET} -v ${env.WORKSPACE}:/zap/wrk ghcr.io/zaproxy/zaproxy:stable \\
                     zap-baseline.py -t http://target-app:5000 -r zap-report.html -J zap-report.json -I
                     """
@@ -90,7 +84,6 @@ pipeline {
             }
             post {
                 always {
-                    // Arrêter et supprimer l'app cible
                     script {
                         def stopCmd = isUnix() ? 'sh' : 'bat'
                         "${stopCmd}" 'docker stop target-app || true'
@@ -108,12 +101,13 @@ pipeline {
             }
         }
     }
+
     post {
         success {
             echo 'Pipeline terminé ! Consulte les rapports de sécurité.'
         }
         failure {
-            echo 'Pipeline échoué. Regarde les logs pour plus de détails.'
+            echo 'Pipeline échoué. Vérifie les logs pour plus de détails.'
         }
     }
 }
