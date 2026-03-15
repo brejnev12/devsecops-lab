@@ -90,6 +90,8 @@ pipeline {
                     sh 'docker rm target-app || true'
 
                     publishHTML([
+                        alwaysLinkToLastBuild: true, 
+                        keepAll: true,                   
                         allowMissing: true,
                         reportDir: '.',
                         reportFiles: 'zap-report.html',
