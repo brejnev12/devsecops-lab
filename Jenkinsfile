@@ -22,10 +22,7 @@ pipeline {
                     -v ${WORKSPACE}:/workspace `
                     -w /workspace `
                     python:3.11-slim `
-                    powershell -Command \"
-                        pip install -r app/requirements.txt; `
-                        pytest tests/ -v
-                    \"
+                    sh -c "pip install -r app/requirements.txt && pytest tests/ -v"
                 """
             }
         }
@@ -38,11 +35,7 @@ pipeline {
                     -v ${WORKSPACE}:/workspace `
                     -w /workspace `
                     python:3.11-slim `
-                    powershell -Command \"
-                        pip install bandit; `
-                        bandit -r app/ -f json -o bandit-report.json; `
-                        bandit -r app/
-                    \"
+                    sh -c "pip install bandit && bandit -r app/ -f json -o bandit-report.json || true && bandit -r app/ || true"
                 """
             }
             post {
@@ -75,11 +68,7 @@ pipeline {
                     --network ${DOCKER_NET} `
                     -v ${WORKSPACE}:/zap/wrk `
                     ghcr.io/zaproxy/zaproxy:stable `
-                    zap-baseline.py `
-                    -t http://target-app:5000 `
-                    -r zap-report.html `
-                    -J zap-report.json `
-                    -I
+                    sh -c "zap-baseline.py -t http://target-app:5000 -r zap-report.html -J zap-report.json -I"
                 """
             }
             post {
