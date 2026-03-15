@@ -4,6 +4,7 @@ pipeline {
         APP_PORT   = '5000'
         ZAP_PORT   = '8090'
         DOCKER_NET = 'devsecops-lab'
+        WORKSPACE  = 'C:/ProgramData/Jenkins/.jenkins/workspace/devsecops-lab'
     }
     stages {
         stage('Checkout') {
@@ -16,33 +17,33 @@ pipeline {
         stage('Build & Test') {
             steps {
                 echo 'Installation des dépendances et exécution des tests unitaires... 🔧'
-                sh '''
-                docker run --rm \
-                    -v C:/ProgramData/Jenkins/.jenkins/workspace/devsecops-lab:/workspace \
-                    -w /workspace \
-                    python:3.11-slim \
-                    sh -c "
-                        pip install -r app/requirements.txt pytest &&
+                powershell """
+                docker run --rm `
+                    -v ${WORKSPACE}:/workspace `
+                    -w /workspace `
+                    python:3.11-slim `
+                    powershell -Command \"
+                        pip install -r app/requirements.txt; `
                         pytest tests/ -v
-                    "
-                '''
+                    \"
+                """
             }
         }
 
         stage('SAST - Bandit Security Scan') {
             steps {
                 echo 'Analyse de sécurité statique du code (SAST)...'
-                sh '''
-                docker run --rm \
-                    -v C:/ProgramData/Jenkins/.jenkins/workspace/devsecops-lab:/workspace \
-                    -w /workspace \
-                    python:3.11-slim \
-                    sh -c "
-                        pip install bandit &&
-                        bandit -r app/ -f json -o bandit-report.json || true &&
-                        bandit -r app/ || true
-                    "
-                '''
+                powershell """
+                docker run --rm `
+                    -v ${WORKSPACE}:/workspace `
+                    -w /workspace `
+                    python:3.11-slim `
+                    powershell -Command \"
+                        pip install bandit; `
+                        bandit -r app/ -f json -o bandit-report.json; `
+                        bandit -r app/
+                    \"
+                """
             }
             post {
                 always {
@@ -54,37 +55,36 @@ pipeline {
         stage('Docker Build') {
             steps {
                 echo 'Construction de l image Docker...'
-                sh 'docker build -t devsecops-app:latest .'
+                powershell 'docker build -t devsecops-app:latest .'
             }
         }
 
         stage('DAST - OWASP ZAP Pentest') {
             steps {
                 echo 'Lancement du pentest dynamique avec OWASP ZAP...'
-                sh '''
-                docker run -d \
-                    --name target-app \
-                    --network ${DOCKER_NET} \
-                    -p ${APP_PORT}:5000 \
+                powershell """
+                docker run -d `
+                    --name target-app `
+                    --network ${DOCKER_NET} `
+                    -p ${APP_PORT}:5000 `
                     devsecops-app:latest
-                sleep 5
-                '''
-                sh '''
-                docker run --rm \
-                    --network ${DOCKER_NET} \
-                    -v $(pwd):/zap/wrk \
-                    ghcr.io/zaproxy/zaproxy:stable \
-                    zap-baseline.py \
-                    -t http://target-app:5000 \
-                    -r zap-report.html \
-                    -J zap-report.json \
+                Start-Sleep -Seconds 5
+                """
+                powershell """
+                docker run --rm `
+                    --network ${DOCKER_NET} `
+                    -v ${WORKSPACE}:/zap/wrk `
+                    ghcr.io/zaproxy/zaproxy:stable `
+                    zap-baseline.py `
+                    -t http://target-app:5000 `
+                    -r zap-report.html `
+                    -J zap-report.json `
                     -I
-                '''
+                """
             }
             post {
                 always {
-                    sh 'docker stop target-app || true'
-                    sh 'docker rm target-app || true'
+                    powershell 'docker stop target-app; docker rm target-app'
                     publishHTML([
                         alwaysLinkToLastBuild: true,
                         keepAll: true,
