@@ -1,15 +1,11 @@
-// Jenkinsfile
 pipeline {
     agent any
-
     environment {
         APP_PORT   = '5000'
         ZAP_PORT   = '8090'
         DOCKER_NET = 'devsecops-lab'
     }
-
     stages {
-
         stage('Checkout') {
             steps {
                 echo 'Récupération du code source...'
@@ -18,33 +14,33 @@ pipeline {
         }
 
         stage('Build & Test') {
-            agent {
-                docker {
-                    image 'python:3.11-slim'
-                }
-            }
             steps {
-                echo 'Installation des dépendances... 🔧'
-                sh 'pip install -r app/requirements.txt pytest'
-
-                echo 'Exécution des tests unitaires...'
-                sh 'pytest tests/ -v'
+                script {
+                    docker.image('python:3.11-slim').inside("-v C:/ProgramData/Jenkins/.jenkins/workspace/devsecops-lab:/workspace") {
+                        dir('/workspace') {
+                            echo 'Installation des dépendances... 🔧'
+                            sh 'pip install -r app/requirements.txt pytest'
+                            echo 'Exécution des tests unitaires...'
+                            sh 'pytest tests/ -v'
+                        }
+                    }
+                }
             }
         }
 
         stage('SAST - Bandit Security Scan') {
-            agent {
-                docker {
-                    image 'python:3.11-slim'
+            steps {
+                script {
+                    docker.image('python:3.11-slim').inside("-v C:/ProgramData/Jenkins/.jenkins/workspace/devsecops-lab:/workspace") {
+                        dir('/workspace') {
+                            echo 'Analyse de sécurité statique du code (SAST)...'
+                            sh 'pip install bandit'
+                            sh 'bandit -r app/ -f json -o bandit-report.json || true'
+                            sh 'bandit -r app/ || true'
+                        }
+                    }
                 }
             }
-            steps {
-                echo 'Analyse de sécurité statique du code (SAST)...'
-                sh 'pip install bandit'
-                sh 'bandit -r app/ -f json -o bandit-report.json || true'
-                sh 'bandit -r app/ || true'
-            }
-
             post {
                 always {
                     archiveArtifacts artifacts: 'bandit-report.json', allowEmptyArchive: true
@@ -68,7 +64,6 @@ pipeline {
                     --network ${DOCKER_NET} \
                     -p ${APP_PORT}:5000 \
                     devsecops-app:latest
-
                 sleep 5
                 '''
                 sh '''
@@ -83,21 +78,18 @@ pipeline {
                     -I
                 '''
             }
-
             post {
                 always {
                     sh 'docker stop target-app || true'
                     sh 'docker rm target-app || true'
-
                     publishHTML([
-                        alwaysLinkToLastBuild: true, 
-                        keepAll: true,                   
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
                         allowMissing: true,
                         reportDir: '.',
                         reportFiles: 'zap-report.html',
                         reportName: 'ZAP Security Report'
                     ])
-
                     archiveArtifacts artifacts: 'zap-report.json', allowEmptyArchive: true
                 }
             }
@@ -108,7 +100,6 @@ pipeline {
         success {
             echo 'Pipeline terminé ! Consulte les rapports de sécurité. ✅'
         }
-
         failure {
             echo 'Pipeline échoué. Regarde les logs pour plus de détails. ❌'
         }
