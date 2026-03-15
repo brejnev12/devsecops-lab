@@ -22,7 +22,7 @@ pipeline {
                     -v ${WORKSPACE}:/workspace `
                     -w /workspace `
                     python:3.11-slim `
-                    sh -c "pip install -r app/requirements.txt && pytest tests/ -v"
+                    sh -c "pip install --no-cache-dir -r app/requirements.txt && python -m pytest tests/ -v"
                 """
             }
         }
@@ -35,7 +35,7 @@ pipeline {
                     -v ${WORKSPACE}:/workspace `
                     -w /workspace `
                     python:3.11-slim `
-                    sh -c "pip install bandit && bandit -r app/ -f json -o bandit-report.json || true && bandit -r app/ || true"
+                    sh -c "pip install --no-cache-dir bandit && bandit -r app/ -f json -o bandit-report.json || true && bandit -r app/ || true"
                 """
             }
             post {
