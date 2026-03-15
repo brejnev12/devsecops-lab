@@ -5,6 +5,7 @@ pipeline {
         ZAP_PORT   = '8090'
         DOCKER_NET = 'devsecops-lab'
         WORKSPACE  = 'C:/ProgramData/Jenkins/.jenkins/workspace/devsecops-lab'
+        BUILDER_IMG = 'python-builder:latest'
     }
     stages {
         stage('Checkout') {
@@ -14,15 +15,22 @@ pipeline {
             }
         }
 
+        stage('Build Builder Image') {
+            steps {
+                echo 'Construction de l image builder Python avec dépendances...'
+                powershell "docker build -f Dockerfile-builder -t ${BUILDER_IMG} ."
+            }
+        }
+
         stage('Build & Test') {
             steps {
-                echo 'Installation des dépendances et exécution des tests unitaires... 🔧'
+                echo 'Exécution des tests unitaires... 🔧'
                 powershell """
                 docker run --rm `
                     -v ${WORKSPACE}:/workspace `
                     -w /workspace `
-                    python:3.11-slim `
-                    sh -c "pip install --no-cache-dir -r app/requirements.txt pytest && python -m pytest tests/ -v"
+                    ${BUILDER_IMG} `
+                    sh -c "pytest tests/ -v"
                 """
             }
         }
@@ -34,8 +42,8 @@ pipeline {
                 docker run --rm `
                     -v ${WORKSPACE}:/workspace `
                     -w /workspace `
-                    python:3.11-slim `
-                    sh -c "pip install --no-cache-dir bandit pytest && bandit -r app/ -f json -o bandit-report.json || true && bandit -r app/ || true"
+                    ${BUILDER_IMG} `
+                    sh -c "bandit -r app/ -f json -o bandit-report.json || true && bandit -r app/ || true"
                 """
             }
             post {
@@ -47,7 +55,7 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                echo 'Construction de l image Docker...'
+                echo 'Construction de l image Docker de l application...'
                 powershell 'docker build -t devsecops-app:latest .'
             }
         }
