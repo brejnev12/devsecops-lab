@@ -15,31 +15,34 @@ pipeline {
 
         stage('Build & Test') {
             steps {
-                script {
-                    docker.image('python:3.11-slim').inside("-v C:/ProgramData/Jenkins/.jenkins/workspace/devsecops-lab:/workspace") {
-                        dir('/workspace') {
-                            echo 'Installation des dépendances... 🔧'
-                            sh 'pip install -r app/requirements.txt pytest'
-                            echo 'Exécution des tests unitaires...'
-                            sh 'pytest tests/ -v'
-                        }
-                    }
-                }
+                echo 'Installation des dépendances et exécution des tests unitaires... 🔧'
+                sh '''
+                docker run --rm \
+                    -v C:/ProgramData/Jenkins/.jenkins/workspace/devsecops-lab:/workspace \
+                    -w /workspace \
+                    python:3.11-slim \
+                    sh -c "
+                        pip install -r app/requirements.txt pytest &&
+                        pytest tests/ -v
+                    "
+                '''
             }
         }
 
         stage('SAST - Bandit Security Scan') {
             steps {
-                script {
-                    docker.image('python:3.11-slim').inside("-v C:/ProgramData/Jenkins/.jenkins/workspace/devsecops-lab:/workspace") {
-                        dir('/workspace') {
-                            echo 'Analyse de sécurité statique du code (SAST)...'
-                            sh 'pip install bandit'
-                            sh 'bandit -r app/ -f json -o bandit-report.json || true'
-                            sh 'bandit -r app/ || true'
-                        }
-                    }
-                }
+                echo 'Analyse de sécurité statique du code (SAST)...'
+                sh '''
+                docker run --rm \
+                    -v C:/ProgramData/Jenkins/.jenkins/workspace/devsecops-lab:/workspace \
+                    -w /workspace \
+                    python:3.11-slim \
+                    sh -c "
+                        pip install bandit &&
+                        bandit -r app/ -f json -o bandit-report.json || true &&
+                        bandit -r app/ || true
+                    "
+                '''
             }
             post {
                 always {
@@ -57,7 +60,7 @@ pipeline {
 
         stage('DAST - OWASP ZAP Pentest') {
             steps {
-                echo 'Lancement du pentest dynamique avec OWASP ZAP... '
+                echo 'Lancement du pentest dynamique avec OWASP ZAP...'
                 sh '''
                 docker run -d \
                     --name target-app \
